@@ -1,5 +1,5 @@
 import time
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, ForeignKey, UniqueConstraint, CheckConstraint, LargeBinary
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, ForeignKey, UniqueConstraint, CheckConstraint, LargeBinary, Index
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -148,3 +148,45 @@ class Signal(Base):
     recipient = Column(Integer, ForeignKey('users.id'), nullable=False)
     payload = Column(Text, nullable=False)
     created = Column(BigInteger, default=now)
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    title = Column(String(160), nullable=False)
+    body = Column(Text, default='')
+    href = Column(String(200), default='#wallet')
+    read = Column(Boolean, default=False, nullable=False)
+    created = Column(BigInteger, default=now)
+
+class Favorite(Base):
+    __tablename__ = 'favorites'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    task_id = Column(Integer, ForeignKey('tasks.id'), nullable=False)
+    __table_args__ = (UniqueConstraint('user_id','task_id'),)
+
+class TicketMessage(Base):
+    __tablename__ = 'ticket_messages'
+    id = Column(Integer, primary_key=True)
+    ticket_id = Column(Integer, ForeignKey('tickets.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    body = Column(Text, nullable=False)
+    created = Column(BigInteger, default=now)
+
+class IdempotencyBinding(Base):
+    __tablename__ = 'idempotency_bindings'
+    key = Column(String(180), primary_key=True)
+    fingerprint = Column(String(64), nullable=False)
+    created = Column(BigInteger, default=now)
+
+# Explicitly installed by manage.py for existing v1 databases as well.
+V2_INDEXES = [
+    Index('ix_v2_tasks_category_active',Task.category,Task.active,Task.id),
+    Index('ix_v2_submissions_queue',Submission.status,Submission.created),
+    Index('ix_v2_tickets_user_status',Ticket.user_id,Ticket.status),
+    Index('ix_v2_ledger_user_kind_time',Ledger.user_id,Ledger.kind,Ledger.created),
+    Index('ix_v2_signal_recipient',Signal.room_id,Signal.recipient,Signal.id),
+    Index('ix_v2_signal_sender_time',Signal.sender,Signal.created),
+    Index('ix_v2_logins_user_expiry',Login.user_id,Login.expires),
+]

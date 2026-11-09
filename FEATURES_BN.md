@@ -38,3 +38,15 @@
 এটি delivered source implementation-এর বিবরণ; “সব ফিচার production-certified”, “অসীম ফ্রি”, “১০০% নিরাপদ” বা “APK ফোনে পরীক্ষা করা হয়েছে”—এমন দাবি নয়। Payment provider integrations, production PostgreSQL live deployment, independent audit, release signing ও ফোনে acceptance testing বাকি।
 
 আপনার কাজের তালিকার সব entry আছে, কিন্তু শুধু entry থাকা মানেই সেই বাইরের ব্যবসায়িক সেবা সংযুক্ত হওয়া নয়। উপরের চতুর্থ কলামে অবশিষ্ট integration স্পষ্ট রাখা হয়েছে।
+
+## v2 additions
+
+- New dark navy/lime app interface; custom inline SVG icons; grouped category launcher; mobile bottom navigation and drawer.
+- Search/filter/sort/paginate tasks, personal saved task list.
+- In-app notifications, request-specific support conversation.
+- Cancel own pending request with one-time atomic hold refund.
+- Session list and revoke-other-sessions control.
+- Own CSV transaction export; admin user search and wallet reconciliation.
+- Additional validation, mutation/reauthentication limits, idempotency payload binding, per-user attachment quota, database indexes and readiness endpoint.
+
+See UPGRADE_V2_BN.md. The per-category external integration limits above still apply.

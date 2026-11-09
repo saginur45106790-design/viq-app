@@ -1,4 +1,4 @@
-import os, re, json, secrets, hashlib, io
+import os, re, json, secrets, hashlib, io, logging
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlparse
 from functools import wraps
@@ -61,6 +61,10 @@ def number(v, lo=0, hi=100000):
         if n < lo or n > hi: raise ValueError()
         return n
     except (ValueError,TypeError): abort(400,'সঠিক পূর্ণসংখ্যা দিন।')
+def boolean(value):
+    if type(value) is not bool: abort(400, "সঠিক true/false মান প্রয়োজন।")
+    return value
+
 def dump(obj, exclude=()):
     return {c.name:getattr(obj,c.name) for c in obj.__table__.columns if c.name not in exclude}
 
@@ -75,7 +79,7 @@ def create_app(test_config=None):
     elif db_url.startswith('postgresql://'): db_url = db_url.replace('postgresql://','postgresql+psycopg://',1)
     if production and (not db_url.startswith('postgresql') or len(os.getenv('SECRET_KEY',''))<32 or not app.config['PUBLIC_URL'].startswith('https://')):
         raise RuntimeError('Production requires PostgreSQL, SECRET_KEY (32+ characters), and HTTPS PUBLIC_URL.')
-    engine = create_engine(db_url, pool_pre_ping=True, **({'connect_args':{'check_same_thread':False,'timeout':30}} if db_url.startswith('sqlite') else {'pool_size':5,'max_overflow':2}))
+    engine = create_engine(db_url, pool_pre_ping=True, **({'connect_args':{'check_same_thread':False,'timeout':30}} if db_url.startswith('sqlite') else {'pool_size':5,'max_overflow':2,'connect_args':{'connect_timeout':10}}))
     app.extensions['engine'] = engine
 
     def setting(key):
@@ -100,11 +104,15 @@ def create_app(test_config=None):
             if g.user.role != 'admin': abort(403,'শুধু অ্যাডমিনের অনুমতি আছে।')
             return fn(*a,**kw)
         return wrapped
+    def notify(uid,title,body='',href='#wallet'):
+        g.db.add(Notification(user_id=uid,title=title,body=body,href=href))
+
     def change(uid, amount, held, kind, ref, note=''):
         # Conditional arithmetic in the database prevents lost updates and negative balances.
         result = g.db.execute(update(User).where(User.id==uid,User.balance+amount>=0,User.held+held>=0).values(balance=User.balance+amount,held=User.held+held))
         if result.rowcount != 1: abort(409,'পর্যাপ্ত ব্যালেন্স নেই অথবা হিসাব পরিবর্তিত হয়েছে।')
         g.db.add(Ledger(user_id=uid,amount=amount,held_delta=held,kind=kind,reference=ref,note=note))
+        notify(uid,'ওয়ালেট আপডেট',f'{kind}: {amount/100:.2f} BDT; hold {held/100:.2f} BDT. '+note)
     def category(slug):
         c = g.db.get(Category,slug)
         if not c or not c.enabled or slug=='adult': abort(403,'বিভাগটি এখন বন্ধ আছে।')
@@ -119,6 +127,8 @@ def create_app(test_config=None):
         g.db = Session(engine,expire_on_commit=False)
         g.user = None
         g.login = None
+        g.request_id=secrets.token_hex(8)
+        g.binding=None
         if not request.path.startswith('/api/'): return
         token = request.cookies.get('viq_session','')
         if token:
@@ -130,9 +140,27 @@ def create_app(test_config=None):
             origin = request.headers.get('Origin')
             if origin and origin.rstrip('/') != (app.config['PUBLIC_URL'] if app.config['PRODUCTION'] else request.host_url.rstrip('/')): abort(403,'অনুমোদিত origin নয়।')
             if g.login and not secrets.compare_digest(request.headers.get('X-CSRF-Token',''),g.login.csrf): abort(403,'সেশন যাচাই ব্যর্থ; রিফ্রেশ করুন।')
+            if request.headers.get('Sec-Fetch-Site')=='cross-site': abort(403,'Cross-site request blocked.')
+            if g.user and not request.path.endswith('/signal'):
+                limit_key=digest('mutation:'+str(g.user.id))
+                attempts=g.db.scalar(select(func.count()).select_from(Attempt).where(Attempt.key==limit_key,Attempt.created>now()-60))
+                if attempts>=90: abort(429,'অনেক অনুরোধ হয়েছে। এক মিনিট পরে চেষ্টা করুন।')
+                g.db.add(Attempt(key=limit_key))
+                g.db.commit()
+            if g.user and request.path in ('/api/tickets','/api/transfer'):
+                data=request.get_json(silent=True)
+                if isinstance(data,dict) and isinstance(data.get('key'),str) and len(data['key'])<=80:
+                    binding_key=str(g.user.id)+':'+request.path+':'+data['key']
+                    semantic_data={k:v for k,v in data.items() if k not in ('password','old')}
+                    fingerprint=digest(json.dumps(semantic_data,sort_keys=True,ensure_ascii=True,separators=(',',':')))
+                    old=g.db.get(IdempotencyBinding,binding_key)
+                    if old and old.fingerprint!=fingerprint: abort(409,'একই request key দিয়ে ভিন্ন তথ্য পাঠানো যাবে না।')
+                    if not old:g.binding=IdempotencyBinding(key=binding_key,fingerprint=fingerprint)
+
 
     @app.after_request
     def after(response):
+        response.headers['X-Request-ID']=getattr(g,'request_id','')
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['X-Frame-Options']='DENY'
         response.headers['Referrer-Policy']='same-origin'
@@ -142,7 +170,9 @@ def create_app(test_config=None):
         if request.path.startswith('/api/'): response.headers['Cache-Control']='no-store'
         if hasattr(g,'db'):
             if response.status_code < 400:
-                try: g.db.commit()
+                try:
+                    if getattr(g,'binding',None) is not None:g.db.add(g.binding)
+                    g.db.commit()
                 except IntegrityError:
                     g.db.rollback()
                     response=jsonify(error='একই অনুরোধ ইতিমধ্যে প্রক্রিয়া হয়েছে। হিসাব রিফ্রেশ করুন।')
@@ -164,6 +194,13 @@ def create_app(test_config=None):
     from werkzeug.exceptions import HTTPException
     @app.errorhandler(HTTPException)
     def http_error(e): return jsonify(error=e.description),e.code
+
+    @app.errorhandler(Exception)
+    def unexpected(error):
+        if isinstance(error,HTTPException):return http_error(error)
+        if hasattr(g,'db'):g.db.rollback()
+        app.logger.error('Unhandled request %s: %s',getattr(g,'request_id','unknown'),type(error).__name__)
+        return jsonify(error='সার্ভারে সমস্যা হয়েছে। আবার চেষ্টা করুন।',request_id=getattr(g,'request_id','')),500
 
     @app.get('/health')
     def health(): return {'status':'ok'}
@@ -221,7 +258,7 @@ def create_app(test_config=None):
     @app.post('/api/password')
     @login_required
     def password():
-        d=post_data(); pw=txt(d.get('password',''),200)
+        d=post_data(); throttle('password:'+str(g.user.id)); pw=txt(d.get('password',''),200)
         if not check_password_hash(g.user.password,str(d.get('old',''))) or len(pw)<12: abort(400,'পুরোনো পাসওয়ার্ড যাচাই করুন; নতুনটি ১২+ অক্ষর দিন।')
         g.user.password=generate_password_hash(pw)
         g.db.execute(delete(Login).where(Login.user_id==g.user.id))
@@ -281,7 +318,10 @@ def create_app(test_config=None):
         elif data.startswith(b'RIFF') and data[8:12]==b'WAVE': mime='audio/wav'
         elif data[4:8]==b'ftyp': mime='video/mp4' if f.mimetype=='video/mp4' else 'audio/mp4'
         if not mime: abort(400,'PNG, JPG, WebM, MP4, OGG অথবা WAV ফাইল দিন।')
+        g.db.scalar(select(User).where(User.id==g.user.id).with_for_update())
+        total=g.db.scalar(select(func.coalesce(func.sum(func.length(Attachment.data)),0)).where(Attachment.user_id==g.user.id))
         a=g.db.scalar(select(Attachment).where(Attachment.submission_id==sid))
+        if total-(len(a.data) if a else 0)+len(data)>64*1024*1024:abort(400,'আপনার ৬৪ MB ফাইল সীমা পূর্ণ। বড় কাজের লিংক দিন বা সাপোর্টে লিখুন।')
         if not a: a=Attachment(submission_id=sid,user_id=g.user.id); g.db.add(a)
         a.data=data; a.mime=mime
         return {'ok':True}
@@ -345,6 +385,7 @@ def create_app(test_config=None):
     def transfer():
         d=post_data(); key=idem(d); ref='transfer:'+key
         if g.db.scalar(select(Ledger.id).where(Ledger.reference==ref+':out')): return {'ok':True,'duplicate':True}
+        throttle('transfer:'+str(g.user.id))
         if not check_password_hash(g.user.password,str(d.get('password',''))): abort(403,'পাসওয়ার্ড ঠিক নয়।')
         recipient=number(d.get('recipient'),1); amount=money(d.get('amount'))
         if recipient==g.user.id: abort(400,'নিজেকে টাকা পাঠানো যাবে না।')
@@ -399,7 +440,7 @@ def create_app(test_config=None):
     def task_state(tid):
         t=g.db.get(Task,tid)
         if not t: abort(404)
-        t.active=bool(post_data().get('active'));audit('task_state',{'id':tid,'active':t.active});return {'ok':True}
+        t.active=boolean(post_data().get('active'));audit('task_state',{'id':tid,'active':t.active});return {'ok':True}
     @app.post('/api/admin/submissions/<int:sid>')
     @admin_required
     def review(sid):
@@ -409,6 +450,7 @@ def create_app(test_config=None):
         if not s or s.status!='pending': abort(409,'এই জমাটি আর অপেক্ষমাণ নেই।')
         t=g.db.get(Task,s.task_id);u=g.db.get(User,s.user_id)
         s.note=txt(d.get('note',''),2000,False)
+        notify(u.id,'কাজের রিভিউ সম্পন্ন',t.title+' — '+action,'#history')
         if action=='approve':
             s.status='approved';change(u.id,t.reward,0,'task',f'submission:{sid}',t.title)
             if u.referrer and t.referral:
@@ -432,13 +474,14 @@ def create_app(test_config=None):
                 change(t.user_id,t.amount if action=='reject' else 0,-t.amount,t.kind+'_'+action,f'ticket:{tid}:settle',note)
             t.status='approved' if action=='approve' else 'rejected';t.note=note
         else: abort(400)
+        notify(t.user_id,'অনুরোধ #'+str(tid)+' আপডেট',action+' — '+note,'#ticket/'+str(tid))
         audit('ticket_'+action,{'id':tid,'note':note});return {'ok':True}
     @app.post('/api/admin/users/<int:uid>')
     @admin_required
     def user_control(uid):
         u=g.db.get(User,uid)
         if not u or u.role=='admin': abort(400,'অ্যাডমিন অ্যাকাউন্ট এখানে পরিবর্তন করা যাবে না।')
-        d=post_data();u.blocked=bool(d.get('blocked'))
+        d=post_data();u.blocked=boolean(d.get('blocked'))
         if u.blocked: g.db.execute(delete(Login).where(Login.user_id==uid))
         audit('user_block',{'id':uid,'blocked':u.blocked});return {'ok':True}
     @app.post('/api/admin/settings')
@@ -462,7 +505,7 @@ def create_app(test_config=None):
         if not c: abort(404)
         d=post_data()
         if slug=='adult' and d.get('enabled'): abort(400,'১৮+ বিভাগের কার্যক্রম এখনো নির্ধারিত হয়নি।')
-        c.enabled=bool(d.get('enabled'));c.description=txt(d.get('description',c.description),2000,False)
+        c.enabled=boolean(d.get('enabled'));c.description=txt(d.get('description',c.description),2000,False)
         audit('category',{'slug':slug,'enabled':c.enabled});return {'ok':True}
     @app.post('/api/admin/exchange-routes')
     @admin_required
@@ -471,7 +514,7 @@ def create_app(test_config=None):
         if d.get('id'):
             r=g.db.get(ExchangeRoute,number(d['id'],1))
             if not r:abort(404)
-            r.enabled=bool(d.get('enabled'))
+            r.enabled=boolean(d.get('enabled'))
         else:
             try:
                 rate=Decimal(str(d.get('rate','')))
@@ -496,7 +539,7 @@ def create_app(test_config=None):
         if kind not in ('call','live'):abort(400)
         host=number(d.get('host_id'),1);guest=number(d.get('guest_id'),1) if kind=='call' else None
         if not g.db.get(User,host) or (guest and not g.db.get(User,guest)) or guest==host:abort(400,'সঠিক সদস্য আইডি দিন।')
-        r=Room(title=txt(d.get('title',''),120),kind=kind,host_id=host,guest_id=guest,audio_only=bool(d.get('audio_only')));g.db.add(r);g.db.flush()
+        r=Room(title=txt(d.get('title',''),120),kind=kind,host_id=host,guest_id=guest,audio_only=boolean(d.get('audio_only',False)));g.db.add(r);g.db.flush()
         audit('room_create',{'id':r.id});return {'room':dump(r)}
     @app.post('/api/admin/rooms/<int:rid>/close')
     @admin_required
@@ -548,6 +591,8 @@ def create_app(test_config=None):
     def leave_room(rid):
         g.db.execute(delete(Peer).where(Peer.room_id==rid,Peer.user_id==g.user.id))
         return {'ok':True}
+    from v2 import register_v2
+    register_v2(app,login_required,admin_required,post_data,change,audit,notify,category)
     return app
 
 app=create_app()

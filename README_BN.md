@@ -1,4 +1,6 @@
-# VIQ — Android অ্যাপ ও সার্ভার সোর্স
+# VIQ v2 — Android অ্যাপ ও সার্ভার সোর্স
+
+**v1 থেকে আপডেট করতে আগে `UPGRADE_V2_BN.md` পড়ুন।** নতুন dark-navy/lime অ্যাপ ডিজাইন, task search/save, notifications, support conversation, pending-request cancellation, session controls এবং wallet reconciliation যুক্ত হয়েছে।
 
 এই প্যাকেজে কাজ করা ব্যাকএন্ড, মোবাইল-উপযোগী ওয়েব ইন্টারফেস, PostgreSQL ডেটা মডেল, Android WebView অ্যাপের সোর্স এবং APK তৈরির GitHub workflow আছে। এটি শুধু স্ক্রিনের নমুনা নয়: লগইন, কাজ জমা, রিভিউ, ব্যালেন্স, রেফার কমিশন এবং অনুরোধের বাস্তব ডেটা সংরক্ষণের কোড আছে। তবে এটি স্বাধীন অডিট করা আর্থিক ব্যবস্থা নয়। কোনো প্রকৃত পেমেন্ট সেবা এতে আগে থেকে সংযুক্ত নেই।
 
@@ -76,7 +78,7 @@ Neon-এর নিজের ব্যবহারসীমা ও বর্ত�
 | Build Command | `pip install -r requirements.txt` |
 | Start Command | নিচের সম্পূর্ণ কমান্ড |
 | Instance Type | Free |
-| Health Check Path | `/health` |
+| Health Check Path | `/ready` |
 
 ```bash
 python manage.py init && gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
@@ -170,7 +172,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 **ভয়েস কাজ:** Voice বিভাগে অ্যাডমিন script দেবেন। ইউজার “কাজ শুরু” → “প্রমাণ / উত্তর” → “ভয়েস রেকর্ড শুরু” চাপবে। সর্বোচ্চ ৩ মিনিট রেকর্ড। মাইক্রোফোন অনুমতি প্রয়োজন। বিকল্পভাবে ফোনে রেকর্ড করে ফাইল upload করা যায়।
 
-**ফাইল:** সর্বোচ্চ ৮ MB, প্রতি submission-এ একটি ফাইল। PNG/JPG, WebM, MP4, OGG, WAV। ফাইল database-এ private রাখা হয়; submitter ও admin দেখতে পারে। Admin শুনতে/দেখতে এবং download করতে পারেন। বড় ভিডিওর জন্য HTTPS share link ব্যবহার করুন। অনেক মিডিয়া হলে PostgreSQL-এর free storage দ্রুত পূর্ণ হবে; production media storage migration প্রয়োজন।
+**ফাইল:** সর্বোচ্চ ৮ MB, প্রতি submission-এ একটি ফাইল; প্রতি ইউজার মোট ৬৪ MB পর্যন্ত। PNG/JPG, WebM, MP4, OGG, WAV। ফাইল database-এ private রাখা হয়; submitter ও admin দেখতে পারে। Admin শুনতে/দেখতে এবং download করতে পারেন। বড় ভিডিওর জন্য HTTPS share link ব্যবহার করুন। অনেক মিডিয়া হলে PostgreSQL-এর free storage দ্রুত পূর্ণ হবে; production media storage migration প্রয়োজন।
 
 **ব্যক্তিগত কল:** অ্যাডমিন “কল / লাইভ” থেকে দুইজন user ID দিয়ে room তৈরি করবেন। শুধু ওই দুইজন দেখতে ও যোগ দিতে পারবেন। সাধারণ user-ও host হতে পারবেন, যদি admin তাঁর ID দেন।
 
