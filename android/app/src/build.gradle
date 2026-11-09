@@ -1,0 +1,37 @@
+plugins { id 'com.android.application' }
+
+def viqUrl = providers.gradleProperty('VIQ_URL').orElse('https://YOUR-VIQ.onrender.com').get()
+if (!(viqUrl ==~ /https:\/\/[a-zA-Z0-9.-]+(:[0-9]+)?\/?/)) {
+    throw new GradleException('VIQ_URL must be your HTTPS origin, without path, query or credentials.')
+}
+android {
+    namespace 'com.viq.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.viq.app'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+        buildConfigField 'String', 'VIQ_URL', '"' + viqUrl + '"'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    signingConfigs {
+        release {
+            if (System.getenv('VIQ_KEYSTORE')) {
+                storeFile file(System.getenv('VIQ_KEYSTORE'))
+                storePassword System.getenv('VIQ_STORE_PASSWORD')
+                keyAlias System.getenv('VIQ_KEY_ALIAS')
+                keyPassword System.getenv('VIQ_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { applicationIdSuffix '.debug' }
+        release {
+            minifyEnabled false
+            if (System.getenv('VIQ_KEYSTORE')) signingConfig signingConfigs.release
+        }
+    }
+}
