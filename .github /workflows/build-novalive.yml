@@ -1,0 +1,162 @@
+name: Build NovaLive V4 - Fixed APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-novalive.yml'
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout latest committed code
+        uses: actions/checkout@v4
+
+      - name: Check NovaLive V4 Dart source
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in mobile/pubspec.yaml mobile/lib/main.dart mobile/lib/api.dart mobile/lib/room_screen.dart mobile/lib/guest_shell.dart mobile/lib/network_status_screen.dart; do
+            if [[ ! -f "$file" ]]; then
+              echo "ERROR: V4 source file missing: $file"
+              echo "Upload this file from the V4 package at exactly this path, then COMMIT to main."
+              exit 1
+            fi
+          done
+          grep -q 'GuestShell' mobile/lib/main.dart || {
+            echo 'ERROR: mobile/lib/main.dart is not the V4 guest-home version.'
+            exit 1
+          }
+          echo 'PASS: V4 main app and Guest Home source files found.'
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project FIRST
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter create --platforms=android --org com.novalive --project-name novalive mobile
+
+      - name: Repair Android release manifest AFTER generating project
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYMANIFEST'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          manifest = Path('mobile/android/app/src/main/AndroidManifest.xml')
+          manifest.parent.mkdir(parents=True, exist_ok=True)
+          android = 'http://schemas.android.com/apk/res/android'
+          ET.register_namespace('android', android)
+          if manifest.exists():
+              tree = ET.parse(manifest)
+              root = tree.getroot()
+              print('Using Android manifest created/preserved by Flutter.')
+          else:
+              # Complete Flutter Android v2 embedding manifest fallback.
+              root = ET.fromstring('''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+                  <application android:label="NovaLive" android:name="${applicationName}" android:icon="@mipmap/ic_launcher">
+                    <activity android:name=".MainActivity" android:exported="true"
+                      android:launchMode="singleTop" android:theme="@style/LaunchTheme"
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+                      android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
+                      <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
+                      <intent-filter><action android:name="android.intent.action.MAIN"/>
+                        <category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+                    </activity>
+                    <meta-data android:name="flutterEmbedding" android:value="2"/>
+                  </application>
+                  <queries><intent><action android:name="android.intent.action.PROCESS_TEXT"/>
+                    <data android:mimeType="text/plain"/></intent></queries>
+                </manifest>''')
+              tree = ET.ElementTree(root)
+              print('Flutter did not create manifest; generated a valid Flutter embedding manifest.')
+          if root.tag != 'manifest' or root.find('application') is None:
+              raise SystemExit('ERROR: malformed AndroidManifest.xml')
+          attr = '{' + android + '}name'
+          required = ['android.permission.INTERNET',
+                      'android.permission.ACCESS_NETWORK_STATE',
+                      'android.permission.CAMERA',
+                      'android.permission.RECORD_AUDIO',
+                      'android.permission.MODIFY_AUDIO_SETTINGS']
+          existing = {n.get(attr) for n in root.findall('uses-permission')}
+          for permission in required:
+              if permission not in existing:
+                  root.insert(0, ET.Element('uses-permission',{attr:permission}))
+          app = root.find('application')
+          app.set('{' + android + '}label', 'NovaLive')
+          app.set('{' + android + '}usesCleartextTraffic', 'false')
+          camera = [n for n in root.findall('uses-feature') if n.get(attr)=='android.hardware.camera']
+          if not camera:
+              root.insert(0, ET.Element('uses-feature', {
+                  attr:'android.hardware.camera', '{'+android+'}required':'false'}))
+          ET.indent(tree, space='  ')
+          tree.write(manifest, encoding='unicode', xml_declaration=True)
+          check = ET.parse(manifest).getroot()
+          actual = {n.get(attr) for n in check.findall('uses-permission')}
+          missing = set(required) - actual
+          if missing: raise SystemExit('ERROR: release permissions missing: '+str(missing))
+          print('PASS: Android release manifest exists and contains INTERNET, CAMERA, AUDIO permissions.')
+          PYMANIFEST
+
+      - name: Validate configured backend URL
+        shell: bash
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYURL'
+          import os
+          from urllib.parse import urlsplit
+          value = os.environ.get('API_BASE_URL','').strip().rstrip('/')
+          parsed = urlsplit(value)
+          if parsed.scheme != 'https' or not parsed.hostname or parsed.path or parsed.query or parsed.fragment:
+              raise SystemExit('ERROR: Set GitHub Actions Variable API_BASE_URL to the Render service HTTPS root URL (no /health or /admin).')
+          print('PASS: APK will use backend host:', parsed.hostname)
+          PYURL
+
+      - name: Install Flutter packages
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Compile release APK
+        working-directory: mobile
+        shell: bash
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          flutter build apk --release --build-name=4.0.1 --build-number=401 \
+            --dart-define="API_BASE_URL=${API_BASE_URL%/}"
+
+      - name: Inspect actual compiled APK permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=mobile/build/app/outputs/flutter-apk/app-release.apk
+          test -s "$apk" || { echo 'ERROR: APK file missing after build'; exit 1; }
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          aapt=$(find "$sdk/build-tools" -type f -name aapt | sort -V | tail -1)
+          test -n "$aapt" || { echo 'ERROR: Android aapt utility not found'; exit 1; }
+          "$aapt" dump permissions "$apk" | tee /tmp/novalive_apk_permissions.txt
+          for p in android.permission.INTERNET android.permission.CAMERA android.permission.RECORD_AUDIO; do
+            grep -q "$p" /tmp/novalive_apk_permissions.txt || { echo "ERROR: Compiled APK missing $p"; exit 1; }
+          done
+          echo 'PASS: Compiled APK has INTERNET, CAMERA and RECORD_AUDIO permissions.'
+
+      - name: Upload verified NovaLive APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaLive-V4-Internet-Fixed-APK
+          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
