@@ -1,3 +1,7 @@
+# VIQ 3.0 — সর্বশেষ নির্দেশনা
+
+এই সংস্করণের আট বিভাগের নিয়ম, আপডেট ও APK তৈরির জন্য আগে **UPGRADE_V3_BN.md** পড়ুন। নিচের পুরোনো নির্দেশনার সঙ্গে কোনো পার্থক্য হলে v3 নির্দেশনা প্রযোজ্য।
+
 # VIQ v2 — Android অ্যাপ ও সার্ভার সোর্স
 
 **v1 থেকে আপডেট করতে আগে `UPGRADE_V2_BN.md` পড়ুন।** নতুন dark-navy/lime অ্যাপ ডিজাইন, task search/save, notifications, support conversation, pending-request cancellation, session controls এবং wallet reconciliation যুক্ত হয়েছে।

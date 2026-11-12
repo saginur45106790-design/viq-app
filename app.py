@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import *
+from v3 import DEFAULTS3, referral_code, referral_id, register_v3
 
 CATEGORIES = [
  ('social','লাইক • ফলো • জয়েন','অনুমোদিত সোশ্যাল কাজ ও প্রমাণ জমা।'),
@@ -23,7 +24,7 @@ CATEGORIES = [
  ('survey','প্রশ্নের উত্তর','লিখিত অথবা ভয়েস উত্তর জমা দিন।'),
  ('groups','ফেসবুক গ্রুপ বিক্রি','অ্যাডমিনের নির্ধারিত শর্তে প্রস্তাব জমা ও যাচাই। প্ল্যাটফর্মের অনুমোদিত হস্তান্তর ছাড়া কাজ সম্পন্ন নয়।'),
  ('daily','ডেইলি টাস্ক','নতুন কাজ, সময়সীমা ও যাচাইকৃত পারিশ্রমিক।'),
- ('live','অডিও / ভিডিও লাইভ','অনুমোদিত হোস্টের ছোট লাইভ রুম।'),
+ ('live','অডিও লাইভ','অডিও রুম, শ্রোতা ও মিনিটভিত্তিক পারিশ্রমিক।'),
  ('voice','লেখা থেকে ভয়েস','স্ক্রিপ্ট পড়ে নিজের কণ্ঠে রেকর্ড জমা দিন।'),
  ('cobra','Cobra ইনভেস্টিং','আপনার বিদ্যমান Cobra সাইটের বাহ্যিক লিংক।'),
  ('recharge','মোবাইল রিচার্জ','নম্বর ও অপারেটর দিয়ে রিচার্জ আবেদন করুন।'),
@@ -33,6 +34,8 @@ DEFAULTS = {'notice':'VIQ-তে স্বাগতম। কাজের শর
  'deposits_enabled':'false','min_withdraw':'100','support':'সাপোর্ট পেজে আপনার বার্তা দিন।',
  'privacy':'আপনার নাম, ইমেইল, জমা দেওয়া কাজ ও লেনদেনের তথ্য সেবা পরিচালনায় ব্যবহৃত হবে। অ্যাডমিন অনুমোদিত কাজের প্রমাণ দেখতে পারেন। কল/লাইভ সার্ভারে রেকর্ড করা হয় না। অ্যাকাউন্ট মুছতে সাপোর্টে আবেদন করুন; প্রয়োজনীয় লেনদেনের রেকর্ড সংরক্ষিত থাকতে পারে।',
  'terms':'আয় নির্ভর করে উপলব্ধ কাজ, কাজের মান ও অনুমোদনের ওপর। নিশ্চিত দৈনিক আয়ের প্রতিশ্রুতি নেই। অ্যাকাউন্টের পাসওয়ার্ড, OTP বা অন্যের ব্যক্তিগত তথ্য জমা দেবেন না। কাজের বিরোধে সাপোর্টে আবেদন করুন।'}
+
+DEFAULTS.update(DEFAULTS3)
 
 def digest(s): return hashlib.sha256(s.encode()).hexdigest()
 def money(value, allow_zero=False):
@@ -238,11 +241,12 @@ def create_app(test_config=None):
         if not d.get('accept'): abort(400,'শর্তে সম্মতি প্রয়োজন।')
         ref=None
         if d.get('referrer'):
-            ref=number(d['referrer'],1)
+            ref=referral_id(d['referrer'])
             u=g.db.get(User,ref)
             if not u or u.blocked: abort(400,'রেফার আইডি ঠিক নয়।')
         u=User(name=txt(d.get('name',''),100),email=email,password=generate_password_hash(pw),referrer=ref)
         g.db.add(u); g.db.flush()
+        app.extensions['v3']['signup'](u)
         return set_login(u)
     @app.post('/api/login')
     def login():
@@ -272,18 +276,23 @@ def create_app(test_config=None):
         result=[]
         for t in rows:
             s=g.db.scalar(select(Submission).where(Submission.user_id==g.user.id,Submission.task_id==t.id))
-            result.append(dict(dump(t),submission=dump(s) if s else None))
+            if app.extensions['v3']['visible'](t):result.append(dict(dump(t),submission=dump(s) if s else None,**app.extensions['v3']['decorate'](t)))
+        if slug=='create-video':
+            own=[t for t in result if t['submission']]
+            fresh=[t for t in result if not t['submission'] and t['active'] and t['used']<t['slots'] and (not t['deadline'] or t['deadline']>=now())]
+            result=own+sorted(fresh,key=lambda t:t['id'])[:1]
         return {'tasks':result}
     @app.post('/api/tasks/<int:tid>/start')
     @login_required
     def start(tid):
-        t=g.db.get(Task,tid)
+        t=g.db.scalar(select(Task).where(Task.id==tid).with_for_update())
         if not t: abort(404)
         category(t.category)
         if not t.active or (t.deadline and t.deadline<now()) or t.used>=t.slots: abort(409,'কাজটি বন্ধ, মেয়াদ শেষ অথবা স্থান পূর্ণ।')
         s=g.db.scalar(select(Submission).where(Submission.user_id==g.user.id,Submission.task_id==tid))
         if not s:
             s=Submission(user_id=g.user.id,task_id=tid); g.db.add(s); g.db.flush()
+        if s.status=='started':app.extensions['v3']['start'](t)
         return {'submission':dump(s)}
     @app.post('/api/tasks/<int:tid>/submit')
     @login_required
@@ -296,6 +305,7 @@ def create_app(test_config=None):
         if s.started+t.min_seconds>now(): abort(400,'নির্ধারিত সময় এখনো শেষ হয়নি।')
         proof=txt(d.get('proof',''),10000,False)
         if not proof and not g.db.scalar(select(Attachment.id).where(Attachment.submission_id==s.id)): abort(400,'উত্তর অথবা ফাইল দিন।')
+        app.extensions['v3']['submit'](t,s,proof)
         result=g.db.execute(update(Task).where(Task.id==tid,Task.active==True,Task.used<Task.slots,or_(Task.deadline==0,Task.deadline>=now())).values(used=Task.used+1))
         if not result.rowcount: abort(409,'কাজের স্থান পূর্ণ অথবা মেয়াদ শেষ।')
         s.proof=proof; s.status='pending'; s.created=now()
@@ -373,11 +383,12 @@ def create_app(test_config=None):
             # Quote locked into ticket; later rate changes never alter existing requests.
             quoted=((Decimal(amount-rt.fee)/100)*Decimal(rt.rate)/10000).quantize(Decimal('.0001'))
             details=json.dumps({'route':rt.name,'rate':str(Decimal(rt.rate)/10000),'fee_paisa':rt.fee,'receive':str(quoted),'unit':rt.unit,'destination':details},ensure_ascii=False)
-        if kind=='agency': category('agency')
+        if kind=='agency': amount=app.extensions['v3']['agency_hold']()
         if kind=='call': category('calls')
         t=Ticket(user_id=g.user.id,kind=kind,amount=amount,details=details,receipt=receipt,idem=key)
         g.db.add(t); g.db.flush()
-        if kind in ('withdraw','recharge','exchange'): change(g.user.id,-amount,amount,kind+'_hold',f'ticket:{t.id}:hold')
+        if kind in ('withdraw','recharge','exchange','agency'): change(g.user.id,-amount,amount,kind+'_hold',f'ticket:{t.id}:hold')
+        if kind=='withdraw':app.extensions['v3']['withdrawal_snapshot'](t)
         audit('ticket_created',{'id':t.id,'kind':kind})
         return {'ticket':dump(t)}
     @app.post('/api/transfer')
@@ -401,9 +412,9 @@ def create_app(test_config=None):
     @login_required
     def team():
         members=g.db.scalars(select(User).where(User.referrer==g.user.id).order_by(User.id.desc()).limit(200))
-        total=g.db.scalar(select(func.coalesce(func.sum(Ledger.amount),0)).where(Ledger.user_id==g.user.id,Ledger.kind=='referral'))
+        total=g.db.scalar(select(func.coalesce(func.sum(Ledger.amount),0)).where(Ledger.user_id==g.user.id,Ledger.kind.in_(['referral','signup_referral','agency_withdraw'])))
         agency=g.db.scalar(select(Ticket).where(Ticket.user_id==g.user.id,Ticket.kind=='agency',Ticket.status=='approved'))
-        return {'referral_url':app.config['PUBLIC_URL']+'/?ref='+str(g.user.id),'commission':total,'agency_approved':bool(agency),'members':[{'id':u.id,'name':u.name,'created':u.created} for u in members]}
+        return {'referral_url':app.config['PUBLIC_URL']+'/?ref='+referral_code(g.user.id),'code':referral_code(g.user.id),'commission':total,'agency_approved':bool(agency),'members':[{'id':u.id,'name':u.name,'created':u.created} for u in members]}
 
     @app.get('/api/admin/overview')
     @admin_required
@@ -427,20 +438,24 @@ def create_app(test_config=None):
         if not model: abort(404)
         q=select(model)
         q=q.order_by(model.id.desc()).offset(offset).limit(100)
-        return {'items':[dump(x) for x in g.db.scalars(q)]}
+        return {'items':[dict(dump(x),**app.extensions['v3']['spec'](x)) if section=='tasks' else dump(x) for x in g.db.scalars(q)]}
     @app.post('/api/admin/tasks')
     @admin_required
     def new_task():
         d=post_data(); slug=d.get('category'); category(slug)
-        if slug in ('cobra','exchange','recharge','team'): abort(400,'এই বিভাগে সাধারণ কাজ নয়, নিজস্ব ফিচার ব্যবহার করুন।')
+        if slug in ('cobra','exchange','recharge','team','agency','live'): abort(400,'এই বিভাগে সাধারণ কাজ নয়, নিজস্ব ফিচার ব্যবহার করুন।')
         t=Task(category=slug,title=txt(d.get('title',''),160),description=txt(d.get('description',''),10000),url=https_url(d.get('url','')),reward=money(d.get('reward')),referral=money(d.get('referral','0'),True),slots=number(d.get('slots'),1,100000),min_seconds=number(d.get('min_seconds','0'),0,86400),deadline=number(d.get('deadline','0'),0,4102444800))
-        g.db.add(t);g.db.flush();audit('task_create',{'id':t.id});return {'task':dump(t)}
+        g.db.add(t);g.db.flush();app.extensions['v3']['save'](t,d);audit('task_create',{'id':t.id});return {'task':dump(t)}
     @app.post('/api/admin/tasks/<int:tid>')
     @admin_required
     def task_state(tid):
         t=g.db.get(Task,tid)
         if not t: abort(404)
-        t.active=boolean(post_data().get('active'));audit('task_state',{'id':tid,'active':t.active});return {'ok':True}
+        enabled=boolean(post_data().get('active'))
+        if enabled and t.category=='create-video':
+            spec=app.extensions['v3']['spec'](t)
+            if not spec['sample_url'] and not spec['sample_uploaded']:abort(400,'আগে নমুনা ভিডিও দিন।')
+        t.active=enabled;audit('task_state',{'id':tid,'active':t.active});return {'ok':True}
     @app.post('/api/admin/submissions/<int:sid>')
     @admin_required
     def review(sid):
@@ -452,13 +467,16 @@ def create_app(test_config=None):
         s.note=txt(d.get('note',''),2000,False)
         notify(u.id,'কাজের রিভিউ সম্পন্ন',t.title+' — '+action,'#history')
         if action=='approve':
-            s.status='approved';change(u.id,t.reward,0,'task',f'submission:{sid}',t.title)
-            if u.referrer and t.referral:
+            snapshot=g.db.get(RewardSnapshot,s.id)
+            reward=snapshot.reward if snapshot else t.reward
+            referral=snapshot.referral if snapshot else t.referral
+            s.status='approved';change(u.id,reward,0,'task',f'submission:{sid}',t.title)
+            if u.referrer and referral:
                 ref=g.db.get(User,u.referrer)
-                if ref and not ref.blocked: change(ref.id,t.referral,0,'referral',f'referral:{sid}',f'Member #{u.id}')
+                if ref and not ref.blocked: change(ref.id,referral,0,'referral',f'referral:{sid}',f'Member #{u.id}')
         else:
             s.status='rejected'
-            g.db.execute(update(Task).where(Task.id==t.id,Task.used>0).values(used=Task.used-1))
+            if t.category!='create-video':g.db.execute(update(Task).where(Task.id==t.id,Task.used>0).values(used=Task.used-1))
         audit('submission_'+action,{'id':sid});return {'ok':True}
     @app.post('/api/admin/tickets/<int:tid>')
     @admin_required
@@ -470,8 +488,9 @@ def create_app(test_config=None):
         elif action in ('approve','reject'):
             if action=='approve' and t.kind in ('deposit','withdraw','recharge','exchange') and not note: abort(400,'যাচাই/পেমেন্ট reference লিখুন।')
             if action=='approve' and t.kind=='deposit': change(t.user_id,t.amount,0,'deposit',f'ticket:{tid}:credit',note)
-            if t.kind in ('withdraw','recharge','exchange'):
+            if t.kind in ('withdraw','recharge','exchange','agency'):
                 change(t.user_id,t.amount if action=='reject' else 0,-t.amount,t.kind+'_'+action,f'ticket:{tid}:settle',note)
+            if action=='approve' and t.kind=='withdraw':app.extensions['v3']['withdrawal_pay'](t)
             t.status='approved' if action=='approve' else 'rejected';t.note=note
         else: abort(400)
         notify(t.user_id,'অনুরোধ #'+str(tid)+' আপডেট',action+' — '+note,'#ticket/'+str(tid))
@@ -492,7 +511,13 @@ def create_app(test_config=None):
             if key not in DEFAULTS: abort(400,'অজানা সেটিং।')
             value=txt(value,10000,False)
             if key=='cobra_url': value=https_url(value)
-            if key=='min_withdraw': money(value)
+            if key in ('min_withdraw','agency_fee'): money(value)
+            if key in ('signup_member','signup_referrer','agency_signup_member','agency_signup_referrer','live_rate'):money(value,True)
+            if key=='survey_daily_limit':number(value,1,100)
+            if key=='video_claim_hours':number(value,1,168)
+            if key=='agency_commission_percent':number(value,0,100)
+            if key=='live_daily_minutes':number(value,1,1440)
+            if key=='live_enabled' and value not in ('true','false'):abort(400)
             if key=='deposits_enabled' and value not in ('true','false'): abort(400)
             s=g.db.get(Setting,key)
             if not s:s=Setting(key=key);g.db.add(s)
@@ -539,13 +564,15 @@ def create_app(test_config=None):
         if kind not in ('call','live'):abort(400)
         host=number(d.get('host_id'),1);guest=number(d.get('guest_id'),1) if kind=='call' else None
         if not g.db.get(User,host) or (guest and not g.db.get(User,guest)) or guest==host:abort(400,'সঠিক সদস্য আইডি দিন।')
-        r=Room(title=txt(d.get('title',''),120),kind=kind,host_id=host,guest_id=guest,audio_only=boolean(d.get('audio_only',False)));g.db.add(r);g.db.flush()
+        r=Room(title=txt(d.get('title',''),120),kind=kind,host_id=host,guest_id=guest,audio_only=True if kind=='live' else boolean(d.get('audio_only',False)));g.db.add(r);g.db.flush()
+        if kind=='live':g.db.add(LiveSession(room_id=r.id,user_id=host,rate=money(setting('live_rate'),True)))
         audit('room_create',{'id':r.id});return {'room':dump(r)}
     @app.post('/api/admin/rooms/<int:rid>/close')
     @admin_required
     def close_room(rid):
         r=g.db.get(Room,rid)
         if not r:abort(404)
+        app.extensions['v3']['end_live'](rid)
         r.active=False;g.db.execute(delete(Signal).where(Signal.room_id==rid));g.db.execute(delete(Peer).where(Peer.room_id==rid));audit('room_close',{'id':rid});return {'ok':True}
     @app.post('/api/rooms/<int:rid>/join')
     @login_required
@@ -589,8 +616,12 @@ def create_app(test_config=None):
     @app.post('/api/rooms/<int:rid>/leave')
     @login_required
     def leave_room(rid):
+        r=g.db.get(Room,rid)
+        if r and r.kind=='live' and r.host_id==g.user.id:
+            app.extensions['v3']['end_live'](rid);r.active=False
         g.db.execute(delete(Peer).where(Peer.room_id==rid,Peer.user_id==g.user.id))
         return {'ok':True}
+    register_v3(app,login_required,admin_required,post_data,change,audit,notify,category,setting,money,number,txt,https_url)
     from v2 import register_v2
     register_v2(app,login_required,admin_required,post_data,change,audit,notify,category)
     return app

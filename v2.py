@@ -21,15 +21,15 @@ def register_v2(app,login_required,admin_required,data,change,audit,notify,categ
     def ready():
         try:
             g.db.scalar(select(func.count()).select_from(Category))
-            return {'ready':True,'version':'2.0.0'}
+            return {'ready':True,'version':'3.0.0'}
         except Exception:return {'ready':False},503
 
     @app.get('/api/dashboard')
     @login_required
     def dashboard():
         counts=dict(g.db.execute(select(Submission.status,func.count()).where(Submission.user_id==g.user.id).group_by(Submission.status)).all())
-        earnings=g.db.scalar(select(func.coalesce(func.sum(Ledger.amount),0)).where(Ledger.user_id==g.user.id,Ledger.kind.in_(['task','referral'])))
-        today=g.db.scalar(select(func.coalesce(func.sum(Ledger.amount),0)).where(Ledger.user_id==g.user.id,Ledger.kind.in_(['task','referral']),Ledger.created>=now()-86400))
+        earnings=g.db.scalar(select(func.coalesce(func.sum(Ledger.amount),0)).where(Ledger.user_id==g.user.id,Ledger.kind.in_(['task','referral','signup_bonus','signup_referral','agency_withdraw','audio_live'])))
+        today=g.db.scalar(select(func.coalesce(func.sum(Ledger.amount),0)).where(Ledger.user_id==g.user.id,Ledger.kind.in_(['task','referral','signup_bonus','signup_referral','agency_withdraw','audio_live']),Ledger.created>=now()-86400))
         unread=g.db.scalar(select(func.count()).select_from(Notification).where(Notification.user_id==g.user.id,Notification.read==False))
         active=g.db.scalar(select(func.count()).select_from(Task).join(Category,Category.slug==Task.category).where(Category.enabled==True,Task.active==True,Task.used<Task.slots,or_(Task.deadline==0,Task.deadline>=now())))
         return {'counts':counts,'earned':earnings,'last_24h':today,'unread':unread,'available':active}
@@ -49,7 +49,7 @@ def register_v2(app,login_required,admin_required,data,change,audit,notify,categ
         order={'reward':Task.reward.desc(),'ending':case((Task.deadline==0,4102444800),else_=Task.deadline).asc(),'new':Task.id.desc()}.get(request.args.get('sort'),Task.id.desc())
         total=g.db.scalar(select(func.count()).select_from(query.subquery()))
         rows=g.db.scalars(query.order_by(order,Task.id.desc()).offset((page-1)*20).limit(20))
-        return {'items':[task_item(t,favorites) for t in rows],'total':total,'page':page}
+        return {'items':[task_item(t,favorites) for t in rows if app.extensions['v3']['visible'](t)],'total':total,'page':page}
 
     @app.post('/api/tasks/<int:tid>/save')
     @login_required
@@ -101,7 +101,7 @@ def register_v2(app,login_required,admin_required,data,change,audit,notify,categ
         t=g.db.scalar(select(Ticket).where(Ticket.id==tid,Ticket.user_id==g.user.id).with_for_update())
         if not t:abort(404)
         if t.status!='pending':abort(409,'শুধু অপেক্ষমাণ অনুরোধ বাতিল করা যায়।')
-        if t.kind in ('withdraw','recharge','exchange'):change(t.user_id,t.amount,-t.amount,t.kind+'_cancel',f'ticket:{tid}:settle','সদস্য বাতিল করেছেন')
+        if t.kind in ('withdraw','recharge','exchange','agency'):change(t.user_id,t.amount,-t.amount,t.kind+'_cancel',f'ticket:{tid}:settle','সদস্য বাতিল করেছেন')
         t.status='cancelled';t.note='সদস্য নিজে বাতিল করেছেন।'
         audit('ticket_cancel',{'id':tid});notify(t.user_id,'অনুরোধ বাতিল হয়েছে',f'#{tid}','#ticket/'+str(tid))
         return {'ok':True}

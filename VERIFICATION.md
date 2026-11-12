@@ -1,43 +1,22 @@
-# VIQ v2 verification — 2026-11-09
-
-This record describes executed checks, not an independent security certificate.
+# VIQ v3 verification
 
 ## Executed
 
-- Backend regression suite: 36 passed, 1 skipped (SQLite local test database).
-- Python compilation: app.py, models.py, manage.py, v2.py.
-- JavaScript syntax: static/app.js and static/v2-ui.js.
-- Android manifest/theme/icon XML parsing.
-- Existing local v1 database initialized successfully with new additive tables.
-- Browser inspection of redesigned desktop home, SVG icons, navigation and all 18 categories, grouped into 7 work / 8 community / 3 money services.
-- Public home rendered successfully with the new dark navy/lime layout.
+- Python/Flask + SQLAlchemy full suite: **58 passed, 1 skipped** (SQLite test databases).
+- v3 module tests cover all seven social-link types, required screenshot/voice proof, wrong-domain rejection, exclusive video reservation/expiry/queue, sample uploads, the five-answer limit, normal and agency signup rewards, agency fee hold/refund/cancellation, withdrawal commission snapshots and once-only settlement, live witness timing, reward review replay rejection, immutable started-task terms, and administrator setting authorization/validation.
+- Node.js component smoke checks: **13 passed** — eight module pages, three admin pages, text/audio proof forms; includes output escaping checks. These are mocked component tests, not browser end-to-end tests.
+- JavaScript syntax: app.js, v2-ui.js, v3-ui.js passed Node syntax checking.
+- Local database initialization completed with existing users preserved.
+- Browser: updated public home page rendered, Edition 03 and audio-live category visible. No application JavaScript errors observed in browser logs; one browser extension metadata error was unrelated to VIQ.
 
-## New test coverage (14 scenarios)
+## Not executed here
 
-1. Dashboard values derived from actual submissions and ledger entries.
-2. Saved task/search behavior and user isolation.
-3. Literal wildcard characters do not become unintended search wildcards.
-4. Notification ownership and read state.
-5. Pending cancellation refunds once; processing/completed requests cannot be cancelled.
-6. Ticket conversation visibility limited to owner/admin.
-7. Other-session revocation preserves the current session.
-8. Reusing an idempotency key with changed financial payload is rejected.
-9. String values cannot masquerade as JSON booleans.
-10. Admin reconciliation detects deliberately introduced balance corruption.
-11. CSV export is owner-only and protects user-controlled text from spreadsheet formula injection.
-12. Cross-site Fetch Metadata is rejected, including when Origin is missing.
-13. Additive initialization preserves existing test balance.
-14. Readiness check and request identifiers are returned.
+- PostgreSQL concurrency test: skipped because TEST_DATABASE_URL was not configured. GitHub workflow includes a PostgreSQL service for running the database suite after upload.
+- Authenticated browser end-to-end workflows and physical Android handset tests.
+- Two-device WebRTC audio across mobile networks, TURN connectivity, large load tests, third-party security audit.
+- Android APK compilation, installation, signing or Play Store release.
+- Render deployment or a GitHub commit: no accessible VIQ repository was returned by the connected GitHub search.
 
-The existing 22 tests continue covering role checks, CSRF, password/login, sessions, task rewards, referral rewards, upload privacy, duplicate deposits, task capacity, deadlines, transfer conservation, withdrawal settlement/refund, recharge, exchange quote, private call access and ledger totals.
+File signatures and size checks do not prove media content is valid or authentic. Server heartbeat accounting does not establish genuine human conversation. Audio earnings therefore require administrator review. Registration bonuses have rate limits/unique-email/replay defenses, not comprehensive anti-Sybil identity verification.
 
-## Limits
-
-- PostgreSQL concurrent-withdrawal test skipped locally; GitHub workflow provisions PostgreSQL 16 to execute it. That remote workflow was not run here.
-- Authenticated flows verified through API tests; signed-in browser end-to-end testing remains.
-- Mobile CSS was implemented, but browser viewport resizing was not available through the supplied control API. An attempted iframe mobile preview was correctly blocked by frame protection; protections were retained and the temporary harness was removed. No physical-phone layout test is claimed.
-- Android source updated to version 2.0.0; no APK compile/sign/install or two-device call test was performed here.
-- TURN, live media, payment provider APIs, production Render/Neon connectivity, load tests and independent penetration testing remain unverified.
-- All original external-service limitations remain listed in FEATURES_BN.md. No new automatic recharge/forex/account-transfer API was added.
-
-Use UPGRADE_V2_BN.md for migration and README_BN.md for first deployment.
+This report does not assert zero bugs, unlimited scale, perfect security, or compatibility with every phone/network.

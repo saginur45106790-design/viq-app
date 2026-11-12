@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from werkzeug.security import generate_password_hash
 from app import app, CATEGORIES, DEFAULTS
-from models import Base, User, Category, Setting, Login, V2_INDEXES
+from models import Base, User, Category, Setting, Login, V2_INDEXES, Task, TaskRule, Room
 
 def init():
     engine=app.extensions['engine'];Base.metadata.create_all(engine)
@@ -11,6 +11,11 @@ def init():
     with Session(engine) as db, db.begin():
         for slug,name,desc in CATEGORIES:
             if not db.get(Category,slug): db.add(Category(slug=slug,name=name,description=desc,enabled=slug!='adult'))
+        # Old generic video jobs with existing submissions keep their original contract.
+        # New jobs use a single slot and reservation rules.
+        live=db.get(Category,'live')
+        if live:live.name='অডিও লাইভ';live.description='অডিও রুম, শ্রোতা ও মিনিটভিত্তিক পারিশ্রমিক।'
+        for room in db.scalars(select(Room).where(Room.kind=='live')):room.audio_only=True
         for k,v in DEFAULTS.items():
             if not db.get(Setting,k):db.add(Setting(key=k,value=v))
         if not db.scalar(select(User).where(User.role=='admin')):

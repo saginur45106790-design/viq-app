@@ -190,3 +190,44 @@ V2_INDEXES = [
     Index('ix_v2_signal_sender_time',Signal.sender,Signal.created),
     Index('ix_v2_logins_user_expiry',Login.user_id,Login.expires),
 ]
+
+# v3 uses additive tables so existing accounts and money are preserved.
+class TaskRule(Base):
+    __tablename__ = 'task_rules'
+    task_id = Column(Integer, ForeignKey('tasks.id'), primary_key=True)
+    platform = Column(String(30), default='')
+    proof_type = Column(String(20), nullable=False)
+    sample_url = Column(Text, default='')
+    sample_data = Column(LargeBinary)
+    sample_mime = Column(String(80))
+
+class TaskReservation(Base):
+    __tablename__ = 'task_reservations'
+    task_id = Column(Integer, ForeignKey('tasks.id'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    expires = Column(BigInteger, nullable=False)
+
+class RewardSnapshot(Base):
+    __tablename__ = 'reward_snapshots'
+    submission_id = Column(Integer, ForeignKey('submissions.id'), primary_key=True)
+    reward = Column(BigInteger, nullable=False)
+    referral = Column(BigInteger, nullable=False)
+
+class WithdrawalCommission(Base):
+    __tablename__ = 'withdrawal_commissions'
+    ticket_id = Column(Integer, ForeignKey('tickets.id'), primary_key=True)
+    owner_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    amount = Column(BigInteger, nullable=False)
+
+class LiveSession(Base):
+    __tablename__ = 'live_sessions'
+    id = Column(Integer, primary_key=True)
+    room_id = Column(Integer, ForeignKey('rooms.id'), unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    rate = Column(BigInteger, nullable=False)
+    seconds = Column(Integer, default=0, nullable=False)
+    last_tick = Column(BigInteger, default=now, nullable=False)
+    witnessed = Column(Boolean, default=False, nullable=False)
+    status = Column(String(20), default='active', nullable=False)
+    note = Column(Text, default='')
+    created = Column(BigInteger, default=now, nullable=False)
