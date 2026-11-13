@@ -1,0 +1,24 @@
+{
+  "version": "5.0",
+  "backend": {
+    "passed": 69,
+    "skipped": 1,
+    "note": "PostgreSQL concurrency not exercised"
+  },
+  "component_checks": 25,
+  "workspace_renders": 36,
+  "browser_layout": {
+    "widths": [
+      320,
+      390,
+      430
+    ],
+    "checks": 108,
+    "horizontal_overflow": 0,
+    "data": "isolated fixtures"
+  },
+  "pixel_identical_verified": false,
+  "render_deployed": false,
+  "apk_built": false,
+  "real_two_device_webrtc_verified": false
+}

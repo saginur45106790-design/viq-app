@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from werkzeug.security import generate_password_hash
 from app import app, CATEGORIES, DEFAULTS
-from models import Base, User, Category, Setting, Login, V2_INDEXES, Task, TaskRule, Room
+from models import Base, User, Category, Setting, Login, V2_INDEXES, Task, TaskRule, Room, Currency
 
 def init():
     engine=app.extensions['engine'];Base.metadata.create_all(engine)
@@ -16,6 +16,9 @@ def init():
         live=db.get(Category,'live')
         if live:live.name='অডিও লাইভ';live.description='অডিও রুম, শ্রোতা ও মিনিটভিত্তিক পারিশ্রমিক।'
         for room in db.scalars(select(Room).where(Room.kind=='live')):room.audio_only=True
+        from v4 import CURRENCIES
+        for code,name,flag,symbol in CURRENCIES:
+            if not db.get(Currency,code):db.add(Currency(code=code,name=name,flag=flag,symbol=symbol))
         for k,v in DEFAULTS.items():
             if not db.get(Setting,k):db.add(Setting(key=k,value=v))
         if not db.scalar(select(User).where(User.role=='admin')):

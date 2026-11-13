@@ -209,6 +209,9 @@ def create_app(test_config=None):
     def health(): return {'status':'ok'}
     @app.get('/')
     @app.get('/admin')
+    @app.get('/admin/')
+    @app.get('/admin/login')
+    @app.get('/admin.html')
     @app.get('/work/<slug>')
     def home(slug=None): return render_template('index.html')
     @app.get('/api/config')
@@ -371,7 +374,9 @@ def create_app(test_config=None):
             receipt='deposit:'+receipt
         if kind=='withdraw' and amount<money(setting('min_withdraw')): abort(400,'সর্বনিম্ন উত্তোলনের পরিমাণ পূরণ হয়নি।')
         if kind=='recharge':
-            category('recharge'); phone=txt(d.get('phone',''),11)
+            category('recharge')
+            if not 2000<=amount<=50000:abort(400,'রিচার্জ সর্বনিম্ন ২০ ও সর্বোচ্চ ৫০০ টাকা।')
+            phone=txt(d.get('phone',''),11)
             if not re.fullmatch(r'01[3-9][0-9]{8}',phone): abort(400,'বাংলাদেশের ১১ সংখ্যার মোবাইল নম্বর দিন।')
             operator=txt(d.get('operator',''),30)
             if operator not in ('GP','Robi','Airtel','Banglalink','Teletalk'): abort(400,'অপারেটর নির্বাচন করুন।')
@@ -580,9 +585,11 @@ def create_app(test_config=None):
         r=g.db.scalar(select(Room).where(Room.id==rid).with_for_update());room_access(r)
         p=g.db.scalar(select(Peer).where(Peer.room_id==rid,Peer.user_id==g.user.id))
         peers=list(g.db.scalars(select(Peer).where(Peer.room_id==rid,Peer.seen>now()-45)))
-        if (not p or p.seen<=now()-45) and len(peers)>=(2 if r.kind=='call' else 5):abort(409,'রুম পূর্ণ। লাইভে সর্বোচ্চ ৫ জন।')
+        if (not p or p.seen<=now()-45) and len(peers)>=(2 if r.kind=='call' else 100):abort(409,'রুম পূর্ণ। লাইভে সর্বোচ্চ ১০০ জন।')
         if not p:p=Peer(room_id=rid,user_id=g.user.id);g.db.add(p)
         p.seen=now()
+        if r.kind=='live' and r.host_id==g.user.id and not g.db.scalar(select(Seat.id).where(Seat.room_id==rid,Seat.number==1)):
+            g.db.add(Seat(room_id=rid,number=1,user_id=g.user.id))
         g.db.execute(delete(Signal).where(Signal.created<now()-300))
         ice=[{'urls':os.getenv('STUN_URL','stun:stun.l.google.com:19302')}]
         if os.getenv('TURN_URL'):ice.append({'urls':os.environ['TURN_URL'],'username':os.getenv('TURN_USERNAME',''),'credential':os.getenv('TURN_PASSWORD','')})
@@ -605,10 +612,11 @@ def create_app(test_config=None):
         for uid in (g.user.id,recipient):
             p=g.db.scalar(select(Peer).where(Peer.room_id==rid,Peer.user_id==uid,Peer.seen>now()-45))
             if not p:abort(403,'সদস্য রুমে নেই।')
-        if r.kind=='live' and r.host_id not in (g.user.id,recipient):abort(403)
+        if r.kind=='live' and not g.db.scalar(select(Seat.id).where(Seat.room_id==rid,Seat.user_id.in_([g.user.id,recipient]))):abort(403)
         payload=d.get('payload')
         if not isinstance(payload,dict) or payload.get('type') not in ('offer','answer','ice'):abort(400)
         encoded=json.dumps(payload)
+        if r.kind=='live' and 'm=video' in encoded:abort(400,'শুধু অডিও।')
         if len(encoded)>50000:abort(400)
         n=g.db.scalar(select(func.count()).select_from(Signal).where(Signal.sender==g.user.id,Signal.created>now()-60))
         if n>300:abort(429)
@@ -619,11 +627,14 @@ def create_app(test_config=None):
         r=g.db.get(Room,rid)
         if r and r.kind=='live' and r.host_id==g.user.id:
             app.extensions['v3']['end_live'](rid);r.active=False
+        g.db.execute(delete(Seat).where(Seat.room_id==rid,Seat.user_id==g.user.id))
         g.db.execute(delete(Peer).where(Peer.room_id==rid,Peer.user_id==g.user.id))
         return {'ok':True}
     register_v3(app,login_required,admin_required,post_data,change,audit,notify,category,setting,money,number,txt,https_url)
     from v2 import register_v2
     register_v2(app,login_required,admin_required,post_data,change,audit,notify,category)
+    from v4 import register_v4
+    register_v4(app,login_required,admin_required,post_data,change,audit,notify,category,money,number,txt,https_url)
     return app
 
 app=create_app()

@@ -231,3 +231,149 @@ class LiveSession(Base):
     status = Column(String(20), default='active', nullable=False)
     note = Column(Text, default='')
     created = Column(BigInteger, default=now, nullable=False)
+
+class MediaAsset(Base):
+    __tablename__='media_assets'
+    id=Column(Integer,primary_key=True)
+    owner_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    mime=Column(String(80),nullable=False)
+    data=Column(LargeBinary,nullable=False)
+    created=Column(BigInteger,default=now)
+
+class Clip(Base):
+    __tablename__='clips'
+    id=Column(Integer,primary_key=True)
+    title=Column(String(160),nullable=False)
+    caption=Column(Text,default='')
+    asset_id=Column(Integer,ForeignKey('media_assets.id'),nullable=False)
+    active=Column(Boolean,default=True)
+    created=Column(BigInteger,default=now)
+
+class WatchSession(Base):
+    __tablename__='watch_sessions'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    clip_id=Column(Integer,ForeignKey('clips.id'),nullable=False)
+    token=Column(String(80),nullable=False)
+    seconds=Column(Integer,default=0,nullable=False)
+    position=Column(Integer,default=0,nullable=False)
+    last_tick=Column(BigInteger,default=now)
+    started=Column(BigInteger,default=now)
+
+class WatchedClip(Base):
+    __tablename__='watched_clips'
+    id=Column(Integer,primary_key=True)
+    user_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    clip_id=Column(Integer,ForeignKey('clips.id'),nullable=False)
+    created=Column(BigInteger,default=now)
+    __table_args__=(UniqueConstraint('user_id','clip_id'),)
+
+class Operation(Base):
+    __tablename__='operations'
+    key=Column(String(180),primary_key=True)
+    fingerprint=Column(String(64),nullable=False)
+    result=Column(Text,nullable=False)
+    created=Column(BigInteger,default=now)
+
+class Currency(Base):
+    __tablename__='currencies'
+    code=Column(String(3),primary_key=True)
+    name=Column(String(80),nullable=False)
+    flag=Column(String(12),nullable=False)
+    symbol=Column(String(12),nullable=False)
+    rate=Column(BigInteger,default=0,nullable=False) # paisa per whole unit
+    enabled=Column(Boolean,default=False,nullable=False)
+
+class Holding(Base):
+    __tablename__='holdings'
+    id=Column(Integer,primary_key=True)
+    user_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    code=Column(String(3),ForeignKey('currencies.code'),nullable=False)
+    units=Column(BigInteger,default=0,nullable=False) # millionths
+    cost=Column(BigInteger,default=0,nullable=False)
+    __table_args__=(UniqueConstraint('user_id','code'),CheckConstraint('units >= 0'),CheckConstraint('cost >= 0'))
+
+class CurrencyTrade(Base):
+    __tablename__='currency_trades'
+    id=Column(Integer,primary_key=True)
+    user_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    code=Column(String(3),nullable=False)
+    side=Column(String(8),nullable=False)
+    units=Column(BigInteger,nullable=False)
+    amount=Column(BigInteger,nullable=False)
+    rate=Column(BigInteger,nullable=False)
+    created=Column(BigInteger,default=now)
+
+class LiveProfile(Base):
+    __tablename__='live_profiles'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    name=Column(String(80),nullable=False)
+    bio=Column(String(300),default='')
+    avatar_id=Column(Integer,ForeignKey('media_assets.id'))
+
+class CoinWallet(Base):
+    __tablename__='coin_wallets'
+    user_id=Column(Integer,ForeignKey('users.id'),primary_key=True)
+    balance=Column(BigInteger,default=0,nullable=False)
+    __table_args__=(CheckConstraint('balance >= 0'),)
+
+class CoinEntry(Base):
+    __tablename__='coin_entries'
+    id=Column(Integer,primary_key=True)
+    user_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    delta=Column(BigInteger,nullable=False)
+    reference=Column(String(180),unique=True,nullable=False)
+    note=Column(Text,default='')
+    created=Column(BigInteger,default=now)
+
+class Seat(Base):
+    __tablename__='seats'
+    id=Column(Integer,primary_key=True)
+    room_id=Column(Integer,ForeignKey('rooms.id'),nullable=False)
+    number=Column(Integer,nullable=False)
+    user_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    __table_args__=(UniqueConstraint('room_id','number'),UniqueConstraint('room_id','user_id'),CheckConstraint('number >= 1 AND number <= 10'))
+
+class RoomMessage(Base):
+    __tablename__='room_messages'
+    id=Column(Integer,primary_key=True)
+    room_id=Column(Integer,ForeignKey('rooms.id'),nullable=False,index=True)
+    sender=Column(Integer,ForeignKey('users.id'),nullable=False)
+    body=Column(String(1000),default='')
+    kind=Column(String(20),default='text')
+    recipient=Column(Integer,ForeignKey('users.id'))
+    gift=Column(String(30),default='')
+    amount=Column(BigInteger,default=0)
+    created=Column(BigInteger,default=now)
+
+class Listing(Base):
+    __tablename__='listings'
+    id=Column(Integer,primary_key=True)
+    seller_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    category=Column(String(20),nullable=False,index=True)
+    title=Column(String(160),nullable=False)
+    description=Column(Text,nullable=False)
+    url=Column(Text,default='')
+    image_id=Column(Integer,ForeignKey('media_assets.id'),nullable=False)
+    price=Column(BigInteger,nullable=False)
+    status=Column(String(20),default='live',nullable=False)
+    created=Column(BigInteger,default=now)
+
+class Deal(Base):
+    __tablename__='deals'
+    id=Column(Integer,primary_key=True)
+    listing_id=Column(Integer,ForeignKey('listings.id'),nullable=False)
+    buyer_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    seller_id=Column(Integer,ForeignKey('users.id'),nullable=False)
+    category=Column(String(20),nullable=False,index=True)
+    title=Column(String(160),nullable=False)
+    amount=Column(BigInteger,nullable=False)
+    status=Column(String(24),default='pending',nullable=False)
+    created=Column(BigInteger,default=now)
+
+class DealMessage(Base):
+    __tablename__='deal_messages'
+    id=Column(Integer,primary_key=True)
+    deal_id=Column(Integer,ForeignKey('deals.id'),nullable=False,index=True)
+    sender=Column(Integer,ForeignKey('users.id'),nullable=False)
+    body=Column(Text,nullable=False)
+    created=Column(BigInteger,default=now)
