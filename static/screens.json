@@ -1,0 +1,290 @@
+[
+  {
+    "number": 1,
+    "key": "social",
+    "title": "লাইক • ফলো • জয়েন",
+    "en": "SOCIAL TASKS",
+    "theme": "blue",
+    "href": "#category/social"
+  },
+  {
+    "number": 2,
+    "key": "create-video",
+    "title": "ভিডিও তৈরি",
+    "en": "CREATOR STUDIO",
+    "theme": "coral",
+    "href": "#category/create-video"
+  },
+  {
+    "number": 3,
+    "key": "ads",
+    "title": "বিজ্ঞাপন দেখুন",
+    "en": "REWARDED ADS",
+    "theme": "violet",
+    "href": "#category/ads"
+  },
+  {
+    "number": 4,
+    "key": "watch-video",
+    "title": "ভিডিও দেখুন",
+    "en": "FOR YOU",
+    "theme": "ink",
+    "href": "#category/watch-video"
+  },
+  {
+    "number": 5,
+    "key": "team",
+    "title": "রেফার ও টিম",
+    "en": "REFER & TEAM",
+    "theme": "forest",
+    "href": "#category/team"
+  },
+  {
+    "number": 6,
+    "key": "calls",
+    "title": "ভিডিও কল",
+    "en": "PRIVATE VIDEO CALL",
+    "theme": "rose",
+    "href": "#category/calls"
+  },
+  {
+    "number": 7,
+    "key": "agency",
+    "title": "এজেন্সি",
+    "en": "AGENCY MEMBERSHIP",
+    "theme": "gold",
+    "href": "#category/agency"
+  },
+  {
+    "number": 8,
+    "key": "pages",
+    "title": "পেজ মার্কেট",
+    "en": "FACEBOOK PAGE MARKETPLACE",
+    "theme": "blue",
+    "href": "#category/pages"
+  },
+  {
+    "number": 9,
+    "key": "gmail",
+    "title": "ইমেইল মার্কেট",
+    "en": "EMAIL MARKETPLACE",
+    "theme": "red",
+    "href": "#category/gmail"
+  },
+  {
+    "number": 10,
+    "key": "adult",
+    "title": "১৮+ বিভাগ",
+    "en": "AGE-RESTRICTED SECTION",
+    "theme": "burgundy",
+    "href": "#category/adult"
+  },
+  {
+    "number": 11,
+    "key": "survey",
+    "title": "প্রশ্নের উত্তর",
+    "en": "DAILY QUESTIONS",
+    "theme": "teal",
+    "href": "#category/survey"
+  },
+  {
+    "number": 12,
+    "key": "groups",
+    "title": "গ্রুপ মার্কেট",
+    "en": "COMMUNITY MARKETPLACE",
+    "theme": "indigo",
+    "href": "#category/groups"
+  },
+  {
+    "number": 13,
+    "key": "daily",
+    "title": "আজকের কাজ",
+    "en": "DAILY MISSIONS",
+    "theme": "orange",
+    "href": "#category/daily"
+  },
+  {
+    "number": 14,
+    "key": "live",
+    "title": "অডিও লাইভ",
+    "en": "AUDIO COMMUNITY",
+    "theme": "night",
+    "href": "#category/live"
+  },
+  {
+    "number": 15,
+    "key": "voice",
+    "title": "লেখা থেকে ভয়েস",
+    "en": "VOICE STUDIO",
+    "theme": "wine",
+    "href": "#category/voice"
+  },
+  {
+    "number": 16,
+    "key": "cobra",
+    "title": "Cobra",
+    "en": "CONNECTION GATEWAY",
+    "theme": "forest",
+    "href": "#category/cobra"
+  },
+  {
+    "number": 17,
+    "key": "recharge",
+    "title": "মোবাইল রিচার্জ",
+    "en": "MOBILE RECHARGE",
+    "theme": "blue",
+    "href": "#category/recharge"
+  },
+  {
+    "number": 18,
+    "key": "exchange",
+    "title": "কারেন্সি এক্সচেঞ্জ",
+    "en": "CURRENCY EXCHANGE",
+    "theme": "terminal",
+    "href": "#category/exchange"
+  },
+  {
+    "number": 19,
+    "key": "profile",
+    "title": "আমার প্রোফাইল",
+    "en": "MY PROFILE",
+    "theme": "sapphire",
+    "href": "#profile"
+  },
+  {
+    "number": 20,
+    "key": "home",
+    "title": "আপনার কর্মজগৎ",
+    "en": "YOUR EVERYDAY WORKSPACE",
+    "theme": "ink",
+    "href": "#home"
+  },
+  {
+    "number": 21,
+    "key": "explore",
+    "title": "সব সেবা",
+    "en": "EXPLORE VIQ",
+    "theme": "blue",
+    "href": "#explore"
+  },
+  {
+    "number": 22,
+    "key": "wallet",
+    "title": "আমার ওয়ালেট",
+    "en": "MY WALLET",
+    "theme": "emerald",
+    "href": "#wallet"
+  },
+  {
+    "number": 23,
+    "key": "deposit",
+    "title": "ব্যালেন্স অ্যাড",
+    "en": "ADD MONEY",
+    "theme": "pink",
+    "href": "#deposit"
+  },
+  {
+    "number": 24,
+    "key": "withdraw",
+    "title": "উইথড্র",
+    "en": "WITHDRAW MONEY",
+    "theme": "orange",
+    "href": "#withdraw"
+  },
+  {
+    "number": 25,
+    "key": "send",
+    "title": "সেন্ড ব্যালেন্স",
+    "en": "SEND BALANCE",
+    "theme": "teal",
+    "href": "#send"
+  },
+  {
+    "number": 26,
+    "key": "deal",
+    "title": "ডিল চ্যাট",
+    "en": "DEAL CONVERSATION",
+    "theme": "indigo",
+    "href": "#deal"
+  },
+  {
+    "number": 27,
+    "key": "deals",
+    "title": "ডিল ইনবক্স",
+    "en": "DEAL INBOX",
+    "theme": "indigo",
+    "href": "#deals"
+  },
+  {
+    "number": 28,
+    "key": "history",
+    "title": "আমার কাজ",
+    "en": "MY WORK HISTORY",
+    "theme": "slate",
+    "href": "#history"
+  },
+  {
+    "number": 29,
+    "key": "saved",
+    "title": "সেভ করা কাজ",
+    "en": "SAVED WORK",
+    "theme": "coral",
+    "href": "#saved"
+  },
+  {
+    "number": 30,
+    "key": "notifications",
+    "title": "নোটিফিকেশন",
+    "en": "YOUR UPDATES",
+    "theme": "blue",
+    "href": "#notifications"
+  },
+  {
+    "number": 31,
+    "key": "settings",
+    "title": "সেটিংস",
+    "en": "SETTINGS & SECURITY",
+    "theme": "teal",
+    "href": "#settings"
+  },
+  {
+    "number": 32,
+    "key": "support",
+    "title": "সহায়তা কেন্দ্র",
+    "en": "SUPPORT CENTER",
+    "theme": "blue",
+    "href": "#support"
+  },
+  {
+    "number": 33,
+    "key": "login",
+    "title": "স্বাগতম VIQ-তে",
+    "en": "WELCOME BACK",
+    "theme": "ocean",
+    "href": "#login"
+  },
+  {
+    "number": 34,
+    "key": "register",
+    "title": "নতুন অ্যাকাউন্ট তৈরি করুন",
+    "en": "JOIN VIQ",
+    "theme": "violet",
+    "href": "#register"
+  },
+  {
+    "number": 35,
+    "key": "admin",
+    "title": "অ্যাডমিন ড্যাশবোর্ড",
+    "en": "ADMIN CONTROL CENTER",
+    "theme": "terminal",
+    "href": "#admin"
+  },
+  {
+    "number": 36,
+    "key": "community-profile",
+    "title": "লাইভ প্রোফাইল",
+    "en": "LIVE PROFILE & COINS",
+    "theme": "night",
+    "href": "#community-profile"
+  }
+]
